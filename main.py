@@ -47,9 +47,26 @@ def validate_name(name):        # функция за валидира на им
         raise ValidationError("Each name should contain at least 3 characters!")
 
 
+# -----------------------------------------------------------------------------------------------------------
+"""Валидиране на парола 2ри начин"""
+
+# class BaseUserSchema(Schema):
+#     email = fields.Email(required=True)
+#     full_name = fields.String(required=True)
+#     # от marshmallow може да използваме validates който е декоратор на метод който да бъде в класа на схемата
+#     @validates("full_name")
+#     def validate_name(self, name):
+#         try:
+#             first_name, last_name = name.split()
+#         except ValueError:
+#             raise ValidationError("Full name should consist of first and last name at least")
+#         if len(first_name) < 3 or len(last_name) < 3:
+#             raise ValueError("Name should be at least 3 characters")
+
+
 class UserSignInSchema(Schema):
     email = fields.Email(required=True)
-    password = fields.Str(required=True)
+    password = fields.Str(required=True, validate=validate.And(validate_password, validate.Length(min=8, max=20)))
     full_name = fields.Str(required=True, validate=validate.And(validate_name, validate.Length(min=3, max=255)))
 
 
