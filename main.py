@@ -52,7 +52,9 @@ def validate_name(name):        # функция за валидира на им
 
 # class BaseUserSchema(Schema):
 #     email = fields.Email(required=True)
+#     password = fields.String(required=True)
 #     full_name = fields.String(required=True)
+#
 #     # от marshmallow може да използваме validates който е декоратор на метод който да бъде в класа на схемата
 #     @validates("full_name")
 #     def validate_name(self, name):
@@ -62,7 +64,7 @@ def validate_name(name):        # функция за валидира на им
 #             raise ValidationError("Full name should consist of first and last name at least")
 #         if len(first_name) < 3 or len(last_name) < 3:
 #             raise ValueError("Name should be at least 3 characters")
-
+# ----------------------------------------------------------------------------------------------------------
 
 class UserSignInSchema(Schema):
     email = fields.Email(required=True)
