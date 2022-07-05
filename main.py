@@ -49,14 +49,18 @@ policy = PasswordPolicy.from_names(
 #         raise ValidationError("Each name should contain at least 3 characters!")
 
 
-# -----------------------------------------------------------------------------------------------------------
-"""Валидиране на парола и име 2ри начин"""
-
-
-class BaseUserSchema(Schema):
+class UserSignInSchema(Schema):
     email = fields.Email(required=True)
-    full_name = fields.String(required=True)
 
+    # валидиране по 1вия начин с двете функции
+    # password = fields.Str(required=True, validate=validate.And(validate_password, validate.Length(min=8, max=20)))
+    # full_name = fields.Str(required=True, validate=validate.And(validate_name, validate.Length(min=3, max=255)))
+
+    # валидиране по 2рия начин с validates decorator в класа
+    password = fields.Str(required=True)
+    full_name = fields.Str(required=True)
+
+    """Валидиране на парола и име: 2ри начин"""
     # от marshmallow може да използваме validates който е декоратор на метод който да бъде в класа на схемата
     @validates("full_name")
     def validate_name(self, name):
@@ -66,19 +70,6 @@ class BaseUserSchema(Schema):
             raise ValidationError("Full name should consist of first and last name at least")
         if len(first_name) < 3 or len(last_name) < 3:
             raise ValueError("Name should be at least 3 characters")
-# ------------------------------------------------------------------------------------------------------------
-
-
-class UserSignInSchema(Schema):
-    email = fields.Email(required=True)
-
-    # валидиране по 1вия начин с двете функции
-    # password = fields.Str(required=True, validate=validate.And(validate_password, validate.Length(min=8, max=20)))
-    # full_name = fields.Str(required=True, validate=validate.And(validate_name, validate.Length(min=3, max=255)))
-
-    # валидиране по 2рия начин с BaseUserSchema
-    password = fields.Str(required=True, )
-    full_name = fields.Str(required=True, validate=validates(validate_name, validates.__name__()))
 
 
 class User(db.Model):
