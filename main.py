@@ -1,12 +1,13 @@
 import enum
 
+import password as password
 from decouple import config
 from flask import Flask, request
 from flask_migrate import Migrate
 from flask_restful import Api, Resource
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import func
-from marshmallow import Schema, fields, ValidationError, validate
+from marshmallow import Schema, fields, ValidationError, validate, validates
 from password_strength import PasswordPolicy
 
 app = Flask(__name__)
@@ -30,44 +31,54 @@ policy = PasswordPolicy.from_names(
     nonletters=1,  # need min. 1 non-letter characters (digits, specials, anything)
 )
 
-
-# функция за проверка на паролата, която проверява за грешки спрямо условията дефинирани отгоре
-def validate_password(value):
-    errors = policy.test(value)
-    if errors:
-        raise ValidationError(f"Not a valid password")
-
-
-def validate_name(name):        # функция за валидира на името да е от 2 имена и да е по-голямо от 3 символа
-    try:
-        first_name, last_name = name.split()
-    except ValueError as ex:
-        raise ValidationError("First and Last name are mandatory!")
-    if len(first_name) < 3 or len(last_name) < 3:
-        raise ValidationError("Each name should contain at least 3 characters!")
+# # функция за проверка на паролата, която проверява за грешки спрямо условията дефинирани отгоре
+# def validate_password(value):
+#     errors = policy.test(value)
+#     if errors:
+#         raise ValidationError(f"Not a valid password")
+#
+#
+# # функция за валидира на името да е от 2 имена и да е по-голямо от 3 символа
+# def validate_name(name):
+#     try:
+#         first_name, last_name = name.split()
+#     except ValueError as ex:
+#         # вдигаме ValidationError който идва от marshmallow и той сирилизира грешката и да я върне като отговор
+#         raise ValidationError("First and Last name are mandatory!")
+#     if len(first_name) < 3 or len(last_name) < 3:
+#         raise ValidationError("Each name should contain at least 3 characters!")
 
 
 # -----------------------------------------------------------------------------------------------------------
-"""Валидиране на парола 2ри начин"""
+"""Валидиране на парола и име 2ри начин"""
 
-# class BaseUserSchema(Schema):
-#     email = fields.Email(required=True)
-#     full_name = fields.String(required=True)
-#     # от marshmallow може да използваме validates който е декоратор на метод който да бъде в класа на схемата
-#     @validates("full_name")
-#     def validate_name(self, name):
-#         try:
-#             first_name, last_name = name.split()
-#         except ValueError:
-#             raise ValidationError("Full name should consist of first and last name at least")
-#         if len(first_name) < 3 or len(last_name) < 3:
-#             raise ValueError("Name should be at least 3 characters")
+
+class BaseUserSchema(Schema):
+    email = fields.Email(required=True)
+    full_name = fields.String(required=True)
+
+    # от marshmallow може да използваме validates който е декоратор на метод който да бъде в класа на схемата
+    @validates("full_name")
+    def validate_name(self, name):
+        try:
+            first_name, last_name = name.split()
+        except ValueError:
+            raise ValidationError("Full name should consist of first and last name at least")
+        if len(first_name) < 3 or len(last_name) < 3:
+            raise ValueError("Name should be at least 3 characters")
+# ------------------------------------------------------------------------------------------------------------
 
 
 class UserSignInSchema(Schema):
     email = fields.Email(required=True)
-    password = fields.Str(required=True, validate=validate.And(validate_password, validate.Length(min=8, max=20)))
-    full_name = fields.Str(required=True, validate=validate.And(validate_name, validate.Length(min=3, max=255)))
+
+    # валидиране по 1вия начин с двете функции
+    # password = fields.Str(required=True, validate=validate.And(validate_password, validate.Length(min=8, max=20)))
+    # full_name = fields.Str(required=True, validate=validate.And(validate_name, validate.Length(min=3, max=255)))
+
+    # валидиране по 2рия начин с BaseUserSchema
+    password = fields.Str(required=True, )
+    full_name = fields.Str(required=True, validate=validates(validate_name, validates.__name__()))
 
 
 class User(db.Model):
@@ -76,11 +87,10 @@ class User(db.Model):
     password = db.Column(db.String(255), nullable=False)
     full_name = db.Column(db.String(255), nullable=False)
     phone = db.Column(db.Text)
-    create_on = db.Column(db.DateTime, server_default=func.now())
     # server_default - директно се създава с часа в който се създава
+    create_on = db.Column(db.DateTime, server_default=func.now())
+    # onupdate - записва последната редакция на този записва /  func.now() - от SQLAlchemy
     updated_on = db.Column(db.DateTime, onupdate=func.now())
-    # onupdate - записва последната редакция на този записва
-    # func.now() - от SQLAlchemy
 
 
 class ColorEnum(enum.Enum):
@@ -117,15 +127,18 @@ class Clothes(db.Model):
     updated_on = db.Column(db.DateTime, onupdate=func.now())
 
 
-class UserSignIn(Resource):         # Ресурс за регистриране в системата.
+class UserSignIn(Resource):  # Ресурс за регистриране в системата.
     def post(self):
-        data = request.get_json()   # получаваме данните в json формат
+        # получаваме данните в json формат
+        data = request.get_json()
         schema = UserSignInSchema()
-        errors = schema.validate(data)  # връща речник с грешки(ако има такива) от подадените данни спрямо схемата за валидиране
+        errors = schema.validate(data)
         if not errors:
-            user = User(**data)         # създаваме си обект user (от клас User)който приема подадените данни от потребителя
-            db.session.add(user)        # вкарваме го в сесията
-            db.session.commit()         # изпращаме всички промени към базата данни
+            # създаваме си обект user (от клас User) който приема подадените данни от потребителя
+            user = User(**data)
+            db.session.add(user)  # вкарваме го в сесията
+            db.session.commit()  # изпращаме всички промени към базата данни
+        # ако има грешки фласк ги сирилизира от речник и ги връща като json обект
         return errors
 
 
