@@ -1,6 +1,5 @@
 import enum
 
-import password as password
 from decouple import config
 from flask import Flask, request
 from flask_migrate import Migrate
@@ -70,6 +69,12 @@ class UserSignInSchema(Schema):
             raise ValidationError("Full name should consist of first and last name at least")
         if len(first_name) < 3 or len(last_name) < 3:
             raise ValueError("Name should be at least 3 characters")
+
+    @validates("password")
+    def validate_password(self, password):
+        errors = policy.test(password)
+        if errors:
+            raise ValidationError(f"{errors}")
 
 
 class User(db.Model):
