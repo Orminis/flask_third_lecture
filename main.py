@@ -1,4 +1,5 @@
-from enum import Enum
+import enum
+from marshmallow_enum import EnumField
 from functools import wraps
 from decouple import config
 from flask import Flask, request
@@ -8,6 +9,7 @@ from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import func
 from marshmallow import Schema, fields, ValidationError, validate, validates
 from password_strength import PasswordPolicy
+import re
 
 app = Flask(__name__)
 
@@ -46,40 +48,48 @@ def validate_schema(schema_name):
                 # Забранява продължението на функцията и подава грешка HTTP 400
                 abort(400, errors=errors)
             return f(*args, **kwargs)
+
         return decorated_function
+
     return decorator
 
 
-# # функция за проверка на паролата, която проверява за грешки спрямо условията дефинирани отгоре
-# def validate_password(value):
-#     errors = policy.test(value)
-#     if errors:
-#         raise ValidationError(f"Not a valid password")
-#
-#
-# # функция за валидира на името да е от 2 имена и да е по-голямо от 3 символа
-# def validate_name(name):
-#     try:
-#         first_name, last_name = name.split()
-#     except ValueError as ex:
-#         # вдигаме ValidationError който идва от marshmallow и той сирилизира грешката и да я върне като отговор
-#         raise ValidationError("First and Last name are mandatory!")
-#     if len(first_name) < 3 or len(last_name) < 3:
-#         raise ValidationError("Each name should contain at least 3 characters!")
+class ColorEnum(enum.Enum):
+    pink = "pink"
+    black = "black"
+    white = "white"
+    yellow = "yellow"
+
+
+class SizeEnum(enum.Enum):
+    xs = "xs"
+    s = "s"
+    m = "m"
+    l = "l"
+    xl = "xl"
+    xxl = "xxl"
+
+
+class SingleClothSchema(Schema):
+    id = fields.Integer()
+    name = fields.String()
+    color = EnumField(ColorEnum, by_value=True)
+    size = EnumField(SizeEnum, by_value=True)
+    create_on = fields.DateTime()
+    updated_on = fields.DateTime()
+
+
+class UserOutShema(Schema):
+    id = fields.Integer()
+    full_name = fields.String()
+    clothes = fields.List(fields.Nested(SingleClothSchema), many=True)
 
 
 class UserSignInSchema(Schema):
+    full_name = fields.Str(required=True)
+    password = fields.Str(required=True)
     email = fields.Email(required=True)
 
-    # валидиране по 1вия начин с двете функции
-    # password = fields.Str(required=True, validate=validate.And(validate_password, validate.Length(min=8, max=20)))
-    # full_name = fields.Str(required=True, validate=validate.And(validate_name, validate.Length(min=3, max=255)))
-
-    # валидиране по 2рия начин с validates decorator в класа
-    password = fields.Str(required=True)
-    full_name = fields.Str(required=True)
-
-    """Валидиране на парола и име: 2ри начин"""
     # от marshmallow може да използваме validates който е декоратор на метод който да бъде в класа на схемата
     @validates("full_name")
     def validate_name(self, name):
@@ -88,13 +98,21 @@ class UserSignInSchema(Schema):
         except ValueError:
             raise ValidationError("Full name should consist of first and last name at least")
         if len(first_name) < 3 or len(last_name) < 3:
-            raise ValueError("Name should be at least 3 characters")
+            raise ValidationError("Name should be at least 3 characters")
 
     @validates("password")
     def validate_password(self, password):
         errors = policy.test(password)
         if errors:
-            raise ValidationError(f"{errors}")
+            raise ValidationError(f"Password is not ok")
+
+    @validates("email")
+    def validate_email(self, email):
+        email = email
+        if re.match(r"(^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$)", email):
+            return "Email is valid"
+        else:
+            raise ValidationError("Email is not valid")
 
 
 class User(db.Model):
@@ -107,22 +125,6 @@ class User(db.Model):
     create_on = db.Column(db.DateTime, server_default=func.now())
     # onupdate - записва последната редакция на този записва /  func.now() - от SQLAlchemy
     updated_on = db.Column(db.DateTime, onupdate=func.now())
-
-
-class ColorEnum(Enum):
-    pink = "pink"
-    black = "black"
-    white = "white"
-    yellow = "yellow"
-
-
-class SizeEnum(Enum):
-    xs = "xs"
-    s = "s"
-    m = "m"
-    l = "l"
-    xl = "xl"
-    xxl = "xxl"
 
 
 class Clothes(db.Model):
@@ -143,26 +145,11 @@ class Clothes(db.Model):
     updated_on = db.Column(db.DateTime, onupdate=func.now())
 
 
-# Ресурс за регистриране в системата
-# class UserSignIn(Resource):
-#     def post(self):
-#         # получаваме данните в json формат
-#         data = request.get_json()
-#         schema = UserSignInSchema()
-#         errors = schema.validate(data)
-#         if not errors:
-#             # създаваме си обект user (от клас User) който приема подадените данни от потребителя
-#             user = User(**data)
-#             db.session.add(user)  # вкарваме го в сесията
-#             db.session.commit()  # изпращаме всички промени към базата данни
-#         # ако има грешки фласк ги сирилизира от речник и ги връща като json обект
-#         return errors
-
-
-class UserSignInWithValidateSchema(Resource):
+class UserSignUp(Resource):
     """Преди изпълнението на post заявката искаме да се изпълни валидирането на данните чрез декоратора validate_schema
     на който декоратор подаваме схемата UserSignInSchema по която схема искаме да се проверят данните.
     """
+
     @validate_schema(UserSignInSchema)
     def post(self):
         data = request.get_json()
@@ -172,7 +159,14 @@ class UserSignInWithValidateSchema(Resource):
         return data
 
 
-api.add_resource(UserSignInWithValidateSchema, "/register/")
+class UserResource(Resource):
+    def get(self, pk):
+        user = User.query.filter_by(id=pk).first()
+        return UserOutShema().dump(user)
+
+
+api.add_resource(UserSignUp, "/register/")
+api.add_resource(UserResource, "/users/<int:pk>/")
 
 if __name__ == "__main__":
     app.run(debug=True)
