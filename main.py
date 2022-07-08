@@ -1,9 +1,9 @@
-import enum
-
+from enum import Enum
+from functools import wraps
 from decouple import config
 from flask import Flask, request
 from flask_migrate import Migrate
-from flask_restful import Api, Resource
+from flask_restful import Api, Resource, abort
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import func
 from marshmallow import Schema, fields, ValidationError, validate, validates
@@ -29,6 +29,26 @@ policy = PasswordPolicy.from_names(
     special=1,  # need min. 1 special characters
     nonletters=1,  # need min. 1 non-letter characters (digits, specials, anything)
 )
+
+
+# троен декоратор за валидиране на различни схеми
+# schema_name = схемата която подаваме за валидиране
+def validate_schema(schema_name):
+    # взема функция
+    def decorator(f):
+        # wraps е от functools. използва се за да може да се вика името и документацията на функцията (f)
+        @wraps(f)
+        # взима args и kwargs на функцията
+        def decorated_function(*args, **kwargs):
+            schema = schema_name()
+            errors = schema.validate(request.get_json())
+            if errors:
+                # Забранява продължението на функцията и подава грешка HTTP 400
+                abort(400, errors=errors)
+            return f(*args, **kwargs)
+        return decorated_function
+    return decorator
+
 
 # # функция за проверка на паролата, която проверява за грешки спрямо условията дефинирани отгоре
 # def validate_password(value):
@@ -89,14 +109,14 @@ class User(db.Model):
     updated_on = db.Column(db.DateTime, onupdate=func.now())
 
 
-class ColorEnum(enum.Enum):
+class ColorEnum(Enum):
     pink = "pink"
     black = "black"
     white = "white"
     yellow = "yellow"
 
 
-class SizeEnum(enum.Enum):
+class SizeEnum(Enum):
     xs = "xs"
     s = "s"
     m = "m"
@@ -123,22 +143,36 @@ class Clothes(db.Model):
     updated_on = db.Column(db.DateTime, onupdate=func.now())
 
 
-class UserSignIn(Resource):  # Ресурс за регистриране в системата.
+# Ресурс за регистриране в системата
+# class UserSignIn(Resource):
+#     def post(self):
+#         # получаваме данните в json формат
+#         data = request.get_json()
+#         schema = UserSignInSchema()
+#         errors = schema.validate(data)
+#         if not errors:
+#             # създаваме си обект user (от клас User) който приема подадените данни от потребителя
+#             user = User(**data)
+#             db.session.add(user)  # вкарваме го в сесията
+#             db.session.commit()  # изпращаме всички промени към базата данни
+#         # ако има грешки фласк ги сирилизира от речник и ги връща като json обект
+#         return errors
+
+
+class UserSignInWithValidateSchema(Resource):
+    """Преди изпълнението на post заявката искаме да се изпълни валидирането на данните чрез декоратора validate_schema
+    на който декоратор подаваме схемата UserSignInSchema по която схема искаме да се проверят данните.
+    """
+    @validate_schema(UserSignInSchema)
     def post(self):
-        # получаваме данните в json формат
         data = request.get_json()
-        schema = UserSignInSchema()
-        errors = schema.validate(data)
-        if not errors:
-            # създаваме си обект user (от клас User) който приема подадените данни от потребителя
-            user = User(**data)
-            db.session.add(user)  # вкарваме го в сесията
-            db.session.commit()  # изпращаме всички промени към базата данни
-        # ако има грешки фласк ги сирилизира от речник и ги връща като json обект
-        return errors
+        user = User(**data)
+        db.session.add(user)
+        db.session.commit()
+        return data
 
 
-api.add_resource(UserSignIn, "/register/")
+api.add_resource(UserSignInWithValidateSchema, "/register/")
 
 if __name__ == "__main__":
     app.run(debug=True)
