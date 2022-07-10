@@ -72,19 +72,23 @@ class SizeEnum(enum.Enum):
     xl = "xl"
     xxl = "xxl"
 
-
+# Schema която да опише всичко във обект Clothes
 class SingleClothSchema(Schema):
     id = fields.Integer()
-    name = fields.String()
+    name = fields.Str()
+    # color/size не са стринг а enumerators и за да ги опишем в схемата като enumerators
+    # използваме EnumField от marshmallow_enum.
     color = EnumField(ColorEnum, by_value=True)
     size = EnumField(SizeEnum, by_value=True)
     create_on = fields.DateTime()
     updated_on = fields.DateTime()
 
 
-class UserOutShema(Schema):
+class UserOutSchema(Schema):
     id = fields.Integer()
-    full_name = fields.String()
+    full_name = fields.Str()
+    # изразяваме че
+    # list от нестнати обекти от схемата SingleClothSchema
     clothes = fields.List(fields.Nested(SingleClothSchema), many=True)
 
 
@@ -180,7 +184,9 @@ class UserSignUp(Resource):
 class UserResource(Resource):
     def get(self, pk):
         user = User.query.filter_by(id=pk).first()
-        return UserOutShema().dump(user)
+        # първо вдигаме обект от UserOutSchema и тогава го dump-ваме
+        # dump = прави обекта от пайтън обект в json
+        return UserOutSchema().dump(user)
 
 
 api.add_resource(UserSignUp, "/register/")
