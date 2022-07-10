@@ -9,6 +9,7 @@ from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import func
 from marshmallow import Schema, fields, ValidationError, validate, validates
 from password_strength import PasswordPolicy
+from werkzeug.security import generate_password_hash
 import re
 
 app = Flask(__name__)
@@ -153,6 +154,8 @@ class UserSignUp(Resource):
     @validate_schema(UserSignInSchema)
     def post(self):
         data = request.get_json()
+        # hashing password with werkzeug.security
+        data['password'] = generate_password_hash(data['password'], method='sha256')
         user = User(**data)
         db.session.add(user)
         db.session.commit()
