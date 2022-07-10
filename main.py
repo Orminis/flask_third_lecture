@@ -60,6 +60,8 @@ class ColorEnum(enum.Enum):
     black = "black"
     white = "white"
     yellow = "yellow"
+    red = 'red'
+    blue = "blue"
 
 
 class SizeEnum(enum.Enum):
@@ -115,6 +117,16 @@ class UserSignInSchema(Schema):
         else:
             raise ValidationError("Email is not valid")
 
+# junction table for connection between tables user and clothes
+users_clothes = db.Table(
+    # name of table
+    "users_clothes",
+    # metadata си идва от db.Model и просто трябва да се подаде
+    db.Model.metadata,
+    db.Column("user_id", db.Integer, db.ForeignKey("user.id")),
+    db.Column("clothes_id", db.Integer, db.ForeignKey("clothes.id")),
+)
+
 
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -126,6 +138,9 @@ class User(db.Model):
     create_on = db.Column(db.DateTime, server_default=func.now())
     # onupdate - записва последната редакция на този записва /  func.now() - от SQLAlchemy
     updated_on = db.Column(db.DateTime, onupdate=func.now())
+    # relationship не променя базата а прави нова заявка да извлече информация за всички дрехи като дрехи обект
+    # от junction table-a users_clothes
+    clothes = db.relationship("Clothes", secondary="users_clothes")
 
 
 class Clothes(db.Model):
